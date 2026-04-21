@@ -37,10 +37,8 @@ async function init() {
     // Create initial commit
     execSync('git config user.name "GitHub CLI"', { stdio: 'inherit' });
     execSync('git config user.email "github-cli@example.com"', { stdio: 'inherit' });
-    // Create an empty file to ensure there's something to commit
-    fs.writeFileSync('.gitkeep', '');
-    execSync('git add .', { stdio: 'inherit' });
-    execSync('git commit -m "initial commit"', { stdio: 'inherit' });
+    // Create empty commit using --allow-empty flag
+    execSync('git commit --allow-empty -m "initial commit"', { stdio: 'inherit' });
     console.log(chalk.blue('Created initial commit'));
     
     // Create main branch
