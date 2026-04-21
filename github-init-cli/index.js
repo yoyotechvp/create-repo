@@ -5,7 +5,7 @@ const path = require('path');
 const { execSync } = require('child_process');
 const { Octokit } = require('@octokit/rest');
 require('dotenv').config();
-const chalk = require('chalk');
+const chalk = require('chalk').default;
 
 program
   .name('github-init')
