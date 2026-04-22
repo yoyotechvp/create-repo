@@ -2,6 +2,8 @@ use clap::Parser;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::env;
+use std::fs;
+use std::process::Command;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -10,7 +12,7 @@ pub struct Args {
     name: String,
     
     #[arg(short, long, default_value = "")]
-    description: String,
+    directory: String,
     
     #[arg(short, long, default_value_t = false)]
     private: bool,
@@ -22,7 +24,6 @@ pub struct Args {
 #[derive(Serialize)]
 struct CreateRepoRequest {
     name: String,
-    description: String,
     private: bool,
     auto_init: bool,
 }
@@ -39,19 +40,18 @@ async fn create_github_repo(
     client: &Client,
     token: &str,
     name: &str,
-    description: &str,
     private: bool,
     auto_init: bool,
 ) -> anyhow::Result<CreateRepoResponse> {
     let request = CreateRepoRequest {
         name: name.to_string(),
-        description: description.to_string(),
         private,
         auto_init,
     };
 
     let response = client
         .post("https://api.github.com/user/repos")
+        .header("User-Agent", "github-init-cli")
         .header("Authorization", format!("token {}", token))
         .header("Accept", "application/vnd.github.v3+json")
         .json(&request)
@@ -74,20 +74,53 @@ fn get_github_token() -> anyhow::Result<String> {
     Err(anyhow::anyhow!("GITHUB_TOKEN environment variable not set"))
 }
 
+fn create_local_repo(directory: &str, name: &str) -> anyhow::Result<()> {
+    // Use directory if provided, otherwise use repo name
+    let repo_path = if !directory.is_empty() {
+        directory.to_string()
+    } else {
+        name.to_string()
+    };
+
+    // Create directory
+    fs::create_dir_all(&repo_path)?;
+
+    // Initialize git repository
+    let output = Command::new("git")
+        .arg("init")
+        .current_dir(&repo_path)
+        .output()?;
+
+    if !output.status.success() {
+        return Err(anyhow::anyhow!("Git init failed: {}", String::from_utf8_lossy(&output.stderr)));
+    }
+
+    // Create README if auto-init
+    let readme_path = format!("{}/README.md", repo_path);
+    fs::File::create(&readme_path)?;
+
+    println!("Local repository created at: {}", repo_path);
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
     let args = Args::parse();
+
+    // Step 1: Create local repository
+    println!("Creating local repository...");
+    create_local_repo(&args.directory, &args.name)?;
+
+    // Step 2: Create remote repository
+    println!("\nCreating remote repository...");
     let token = get_github_token()?;
     let client = Client::new();
-
-    println!("Creating GitHub repository '{}'...", args.name);
     
     let repo = create_github_repo(
         &client,
         &token,
         &args.name,
-        &args.description,
         args.private,
         args.auto_init,
     )
