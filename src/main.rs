@@ -95,23 +95,10 @@ fn create_local_repo(directory: &str, name: &str) -> anyhow::Result<()> {
         return Err(anyhow::anyhow!("Git init failed: {}", String::from_utf8_lossy(&output.stderr)));
     }
 
-    // Create README
-    let readme_path = format!("{}/README.md", repo_path);
-    fs::File::create(&readme_path)?;
-
-    // Add and commit files
-    let output = Command::new("git")
-        .arg("add")
-        .arg(".")
-        .current_dir(&repo_path)
-        .output()?;
-
-    if !output.status.success() {
-        return Err(anyhow::anyhow!("Git add failed: {}", String::from_utf8_lossy(&output.stderr)));
-    }
-
+    // Create empty commit
     let output = Command::new("git")
         .arg("commit")
+        .arg("--allow-empty")
         .arg("-m")
         .arg("Initial commit")
         .current_dir(&repo_path)
@@ -125,10 +112,48 @@ fn create_local_repo(directory: &str, name: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn sync_to_remote(repo_path: &str, remote_url: &str) -> anyhow::Result<()> {
+    // Add remote
+    let output = Command::new("git")
+        .arg("remote")
+        .arg("add")
+        .arg("origin")
+        .arg(remote_url)
+        .current_dir(repo_path)
+        .output()?;
+
+    if !output.status.success() {
+        return Err(anyhow::anyhow!("Git remote add failed: {}", String::from_utf8_lossy(&output.stderr)));
+    }
+
+    // Push to main branch
+    let output = Command::new("git")
+        .arg("push")
+        .arg("-u")
+        .arg("origin")
+        .arg("main")
+        .current_dir(repo_path)
+        .output()?;
+
+    if !output.status.success() {
+        return Err(anyhow::anyhow!("Git push failed: {}", String::from_utf8_lossy(&output.stderr)));
+    }
+
+    println!("Repository synced to remote: {}", remote_url);
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
     let args = Args::parse();
+
+    // Calculate repo path
+    let repo_path = if !args.directory.is_empty() {
+        format!("{}/{}", args.directory, args.name)
+    } else {
+        args.name.to_string()
+    };
 
     // Step 1: Create local repository
     println!("Creating local repository...");
@@ -148,7 +173,11 @@ async fn main() -> anyhow::Result<()> {
     )
     .await?;
 
-    println!("Repository created successfully!");
+    // Step 3: Sync to remote
+    println!("\nSyncing to remote repository...");
+    sync_to_remote(&repo_path, &repo.html_url)?;
+
+    println!("\nRepository created successfully!");
     println!("Name: {}", repo.name);
     println!("URL: {}", repo.html_url);
     println!("Private: {}", repo.private);
