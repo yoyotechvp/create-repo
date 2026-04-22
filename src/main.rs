@@ -75,9 +75,9 @@ fn get_github_token() -> anyhow::Result<String> {
 }
 
 fn create_local_repo(directory: &str, name: &str) -> anyhow::Result<()> {
-    // Use directory if provided, otherwise use repo name
+    // Combine directory and name as final path
     let repo_path = if !directory.is_empty() {
-        directory.to_string()
+        format!("{}/{}", directory, name)
     } else {
         name.to_string()
     };
@@ -95,9 +95,31 @@ fn create_local_repo(directory: &str, name: &str) -> anyhow::Result<()> {
         return Err(anyhow::anyhow!("Git init failed: {}", String::from_utf8_lossy(&output.stderr)));
     }
 
-    // Create README if auto-init
+    // Create README
     let readme_path = format!("{}/README.md", repo_path);
     fs::File::create(&readme_path)?;
+
+    // Add and commit files
+    let output = Command::new("git")
+        .arg("add")
+        .arg(".")
+        .current_dir(&repo_path)
+        .output()?;
+
+    if !output.status.success() {
+        return Err(anyhow::anyhow!("Git add failed: {}", String::from_utf8_lossy(&output.stderr)));
+    }
+
+    let output = Command::new("git")
+        .arg("commit")
+        .arg("-m")
+        .arg("Initial commit")
+        .current_dir(&repo_path)
+        .output()?;
+
+    if !output.status.success() {
+        return Err(anyhow::anyhow!("Git commit failed: {}", String::from_utf8_lossy(&output.stderr)));
+    }
 
     println!("Local repository created at: {}", repo_path);
     Ok(())
