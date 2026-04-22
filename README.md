@@ -61,7 +61,7 @@ github-init-cli --name my-new-repo
 ### With Options
 
 ```bash
-github-init-cli --name my-new-repo --description "My awesome project" --private --auto-init
+github-init-cli --name my-new-repo --directory ./my-project --private --auto-init
 ```
 
 ### Command Line Options
@@ -69,7 +69,7 @@ github-init-cli --name my-new-repo --description "My awesome project" --private 
 | Option | Short | Description | Default |
 |--------|-------|-------------|---------|
 | `--name` | `-n` | Repository name (required) | N/A |
-| `--description` | `-d` | Repository description | Empty string |
+| `--directory` | `-d` | Local directory path | Empty string (uses repo name) |
 | `--private` | `-p` | Create a private repository | `false` |
 | `--auto-init` | `-a` | Auto-initialize with README | `false` |
 | `--help` | `-h` | Print help information | N/A |
