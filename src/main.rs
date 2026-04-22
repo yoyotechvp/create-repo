@@ -85,9 +85,11 @@ fn create_local_repo(directory: &str, name: &str) -> anyhow::Result<()> {
     // Create directory
     fs::create_dir_all(&repo_path)?;
 
-    // Initialize git repository
+    // Initialize git repository with main branch
     let output = Command::new("git")
         .arg("init")
+        .arg("-b")
+        .arg("main")
         .current_dir(&repo_path)
         .output()?;
 
