@@ -107,6 +107,29 @@ struct CreateRepoResponse {
     private: bool,
 }
 
+async fn check_repo_exists(
+    client: &Client,
+    token: &str,
+    name: &str,
+) -> anyhow::Result<Option<CreateRepoResponse>> {
+    let response = client
+        .get(format!("https://api.github.com/user/repos/{}", name))
+        .header("User-Agent", "github-init-cli")
+        .header("Authorization", format!("token {}", token))
+        .header("Accept", "application/vnd.github.v3+json")
+        .send()
+        .await?;
+
+    if response.status().is_success() {
+        let repo = response.json::<CreateRepoResponse>().await?;
+        Ok(Some(repo))
+    } else if response.status().as_u16() == 404 {
+        Ok(None)
+    } else {
+        return Err(anyhow::anyhow!("Failed to check repo existence: {}", response.text().await?));
+    }
+}
+
 async fn create_github_repo(
     client: &Client,
     token: &str,
@@ -312,17 +335,29 @@ async fn main() -> anyhow::Result<()> {
     let token = get_github_token()?;
     let client = Client::new();
     
-    let repo = match create_github_repo(
-        &client,
-        &token,
-        &args.name,
-        args.private,
-        args.auto_init,
-    )
-    .await {
-        Ok(repo) => {
-            rollback_manager.add_step(Step::RepoCreatedOnGithub(args.name.clone()));
-            repo
+    let repo = match check_repo_exists(&client, &token, &args.name).await {
+        Ok(Some(existing_repo)) => {
+            println!("Remote repository already exists: {}, skipping creation", existing_repo.name);
+            existing_repo
+        }
+        Ok(None) => {
+            match create_github_repo(
+                &client,
+                &token,
+                &args.name,
+                args.private,
+                args.auto_init,
+            )
+            .await {
+                Ok(repo) => {
+                    rollback_manager.add_step(Step::RepoCreatedOnGithub(args.name.clone()));
+                    repo
+                }
+                Err(e) => {
+                    rollback_manager.rollback();
+                    return Err(e);
+                }
+            }
         }
         Err(e) => {
             rollback_manager.rollback();
