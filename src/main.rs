@@ -113,21 +113,28 @@ async fn check_repo_exists(
     name: &str,
 ) -> anyhow::Result<Option<CreateRepoResponse>> {
     let response = client
-        .get(format!("https://api.github.com/user/repos/{}", name))
+        .get("https://api.github.com/user/repos")
         .header("User-Agent", "github-init-cli")
         .header("Authorization", format!("token {}", token))
         .header("Accept", "application/vnd.github.v3+json")
+        .query(&[ ("per_page", "100") ])
         .send()
         .await?;
 
-    if response.status().is_success() {
-        let repo = response.json::<CreateRepoResponse>().await?;
-        Ok(Some(repo))
-    } else if response.status().as_u16() == 404 {
-        Ok(None)
-    } else {
+    if !response.status().is_success() {
         return Err(anyhow::anyhow!("Failed to check repo existence: {}", response.text().await?));
     }
+
+    let repos: Vec<CreateRepoResponse> = response.json().await?;
+    
+    // Find repo with matching name
+    for repo in repos {
+        if repo.name == name {
+            return Ok(Some(repo));
+        }
+    }
+    
+    Ok(None)
 }
 
 async fn create_github_repo(
