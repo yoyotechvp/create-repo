@@ -46,7 +46,7 @@ jobs:
         run: cargo test --all
       
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: github-init-cli-${{ runner.os }}
           path: ${{ matrix.os == 'windows-latest' && './target/release/github-init-cli.exe' || './target/release/github-init-cli' }}
@@ -63,47 +63,21 @@ jobs:
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
       
       - name: Download Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           path: artifacts
       
       - name: Create Release
         id: create_release
-        uses: actions/create-release@v1
+        uses: softprops/action-gh-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ github.ref }}
-          release_name: Release v${{ env.VERSION }}
+          name: Release v${{ env.VERSION }}
           draft: false
           prerelease: false
-      
-      - name: Upload Linux Artifact
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./artifacts/github-init-cli-Linux/github-init-cli
-          asset_name: github-init-cli
-          asset_content_type: application/octet-stream
-      
-      - name: Upload Windows Artifact
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./artifacts/github-init-cli-Windows/github-init-cli.exe
-          asset_name: github-init-cli.exe
-          asset_content_type: application/octet-stream
-      
-      - name: Upload macOS Artifact
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./artifacts/github-init-cli-macOS/github-init-cli
-          asset_name: github-init-cli
-          asset_content_type: application/octet-stream
+          files:
+            - ./artifacts/github-init-cli-Linux/github-init-cli
+            - ./artifacts/github-init-cli-Windows/github-init-cli.exe
+            - ./artifacts/github-init-cli-macOS/github-init-cli
