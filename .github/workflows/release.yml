@@ -44,18 +44,28 @@ jobs:
       
       - name: Test
         run: cargo test --all
+      
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: github-init-cli-${{ runner.os }}
+          path: ${{ matrix.os == 'windows-latest' && './target/release/github-init-cli.exe' || './target/release/github-init-cli' }}
+          retention-days: 1
   
   release:
     needs: build-and-test
     runs-on: ubuntu-latest
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
     steps:
       - uses: actions/checkout@v4
       
       - name: Extract Version
         id: extract_version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+      
+      - name: Download Artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: artifacts
       
       - name: Create Release
         id: create_release
@@ -67,40 +77,33 @@ jobs:
           release_name: Release v${{ env.VERSION }}
           draft: false
           prerelease: false
-  
-  upload-artifacts:
-    needs: release
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    steps:
-      - uses: actions/checkout@v4
       
-      - name: Setup Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-      
-      - name: Cache Cargo
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      
-      - name: Build
-        run: cargo build --release
-      
-      - name: Upload Artifact
+      - name: Upload Linux Artifact
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ needs.release.outputs.upload_url }}
-          asset_path: ${{ matrix.os == 'windows-latest' && './target/release/github-init-cli.exe' || './target/release/github-init-cli' }}
-          asset_name: ${{ matrix.os == 'windows-latest' && 'github-init-cli.exe' || 'github-init-cli' }}
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./artifacts/github-init-cli-Linux/github-init-cli
+          asset_name: github-init-cli
+          asset_content_type: application/octet-stream
+      
+      - name: Upload Windows Artifact
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./artifacts/github-init-cli-Windows/github-init-cli.exe
+          asset_name: github-init-cli.exe
+          asset_content_type: application/octet-stream
+      
+      - name: Upload macOS Artifact
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./artifacts/github-init-cli-macOS/github-init-cli
+          asset_name: github-init-cli
           asset_content_type: application/octet-stream
