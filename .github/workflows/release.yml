@@ -77,7 +77,4 @@ jobs:
           name: Release v${{ env.VERSION }}
           draft: false
           prerelease: false
-          files:
-            - ./artifacts/github-init-cli-Linux/github-init-cli
-            - ./artifacts/github-init-cli-Windows/github-init-cli.exe
-            - ./artifacts/github-init-cli-macOS/github-init-cli
+          files: ./artifacts/**/*
