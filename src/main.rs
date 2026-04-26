@@ -9,7 +9,7 @@ use std::process::Command;
 enum Step {
     DirectoryCreated(String),
     GitInitialized(String),
-    CommitCreated(String),
+    CommitCreated(()),
     RemoteCreated(String),
     RepoCreatedOnGithub(String),
 }
@@ -30,7 +30,7 @@ impl RollbackManager {
 
     fn rollback(&self) {
         println!("\nRolling back changes...");
-        
+
         // Rollback in reverse order
         for step in self.steps.iter().rev() {
             match step {
@@ -63,11 +63,14 @@ impl RollbackManager {
                     }
                 }
                 Step::RepoCreatedOnGithub(repo_name) => {
-                    println!("Note: Remote repository '{}' was created on GitHub and needs to be deleted manually", repo_name);
+                    println!(
+                        "Note: Remote repository '{}' was created on GitHub and needs to be deleted manually",
+                        repo_name
+                    );
                 }
             }
         }
-        
+
         println!("Rollback completed");
     }
 }
@@ -77,16 +80,16 @@ impl RollbackManager {
 pub struct Args {
     #[arg(short, long)]
     name: String,
-    
+
     #[arg(short, long, default_value = "")]
     directory: String,
-    
+
     #[arg(short, long, default_value_t = false)]
     private: bool,
-    
+
     #[arg(short, long, default_value_t = false)]
     auto_init: bool,
-    
+
     #[arg(long, default_value_t = false)]
     https: bool,
 }
@@ -100,11 +103,13 @@ struct CreateRepoRequest {
 
 #[derive(Deserialize, Debug)]
 struct CreateRepoResponse {
+    #[allow(dead_code)]
     id: u64,
     name: String,
-    html_url: String,
-    ssh_url: String,
+    #[allow(dead_code)]
     private: bool,
+    ssh_url: String,
+    html_url: String,
 }
 
 async fn check_repo_exists(
@@ -117,23 +122,26 @@ async fn check_repo_exists(
         .header("User-Agent", "github-init-cli")
         .header("Authorization", format!("token {}", token))
         .header("Accept", "application/vnd.github.v3+json")
-        .query(&[ ("per_page", "100") ])
+        .query(&[("per_page", "100")])
         .send()
         .await?;
 
     if !response.status().is_success() {
-        return Err(anyhow::anyhow!("Failed to check repo existence: {}", response.text().await?));
+        return Err(anyhow::anyhow!(
+            "Failed to check repo existence: {}",
+            response.text().await?
+        ));
     }
 
     let repos: Vec<CreateRepoResponse> = response.json().await?;
-    
+
     // Find repo with matching name
     for repo in repos {
         if repo.name == name {
             return Ok(Some(repo));
         }
     }
-    
+
     Ok(None)
 }
 
@@ -160,7 +168,10 @@ async fn create_github_repo(
         .await?;
 
     if !response.status().is_success() {
-        return Err(anyhow::anyhow!("Failed to create repo: {}", response.text().await?));
+        return Err(anyhow::anyhow!(
+            "Failed to create repo: {}",
+            response.text().await?
+        ));
     }
 
     let repo = response.json::<CreateRepoResponse>().await?;
@@ -177,7 +188,7 @@ fn get_github_token() -> anyhow::Result<String> {
 
 fn create_local_repo(directory: &str, name: &str) -> anyhow::Result<Vec<Step>> {
     let mut steps = Vec::new();
-    
+
     // Combine directory and name as final path
     let repo_path = if !directory.is_empty() {
         format!("{}/{}", directory, name)
@@ -186,7 +197,7 @@ fn create_local_repo(directory: &str, name: &str) -> anyhow::Result<Vec<Step>> {
     };
 
     // Check if directory exists
-    if !fs::metadata(&repo_path).is_ok() {
+    if fs::metadata(&repo_path).is_err() {
         // Create directory
         fs::create_dir_all(&repo_path)?;
         println!("Created directory: {}", repo_path);
@@ -197,7 +208,7 @@ fn create_local_repo(directory: &str, name: &str) -> anyhow::Result<Vec<Step>> {
 
     // Check if git repository is already initialized
     let git_dir = format!("{}/.git", repo_path);
-    if !fs::metadata(&git_dir).is_ok() {
+    if fs::metadata(&git_dir).is_err() {
         // Initialize git repository with main branch
         let output = Command::new("git")
             .arg("init")
@@ -207,12 +218,18 @@ fn create_local_repo(directory: &str, name: &str) -> anyhow::Result<Vec<Step>> {
             .output()?;
 
         if !output.status.success() {
-            return Err(anyhow::anyhow!("Git init failed: {}", String::from_utf8_lossy(&output.stderr)));
+            return Err(anyhow::anyhow!(
+                "Git init failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ));
         }
         println!("Initialized git repository at: {}", repo_path);
         steps.push(Step::GitInitialized(repo_path.clone()));
     } else {
-        println!("Git repository already initialized at: {}, skipping init", repo_path);
+        println!(
+            "Git repository already initialized at: {}, skipping init",
+            repo_path
+        );
     }
 
     // Check if there are any commits
@@ -233,10 +250,13 @@ fn create_local_repo(directory: &str, name: &str) -> anyhow::Result<Vec<Step>> {
             .output()?;
 
         if !output.status.success() {
-            return Err(anyhow::anyhow!("Git commit failed: {}", String::from_utf8_lossy(&output.stderr)));
+            return Err(anyhow::anyhow!(
+                "Git commit failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ));
         }
         println!("Created initial commit");
-        steps.push(Step::CommitCreated(repo_path.clone()));
+        steps.push(Step::CommitCreated(()));
     } else {
         println!("Repository already has commits, skipping initial commit");
     }
@@ -247,7 +267,7 @@ fn create_local_repo(directory: &str, name: &str) -> anyhow::Result<Vec<Step>> {
 
 fn sync_to_remote(repo_path: &str, remote_url: &str) -> anyhow::Result<Vec<Step>> {
     let mut steps = Vec::new();
-    
+
     // Check if remote origin already exists
     let output = Command::new("git")
         .arg("remote")
@@ -267,7 +287,10 @@ fn sync_to_remote(repo_path: &str, remote_url: &str) -> anyhow::Result<Vec<Step>
             .output()?;
 
         if !output.status.success() {
-            return Err(anyhow::anyhow!("Git remote add failed: {}", String::from_utf8_lossy(&output.stderr)));
+            return Err(anyhow::anyhow!(
+                "Git remote add failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ));
         }
         println!("Added remote origin: {}", remote_url);
         steps.push(Step::RemoteCreated(repo_path.to_string()));
@@ -286,7 +309,10 @@ fn sync_to_remote(repo_path: &str, remote_url: &str) -> anyhow::Result<Vec<Step>
                 .output()?;
 
             if !output.status.success() {
-                return Err(anyhow::anyhow!("Git remote set-url failed: {}", String::from_utf8_lossy(&output.stderr)));
+                return Err(anyhow::anyhow!(
+                    "Git remote set-url failed: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                ));
             }
             println!("Updated remote origin URL to: {}", remote_url);
         }
@@ -302,7 +328,10 @@ fn sync_to_remote(repo_path: &str, remote_url: &str) -> anyhow::Result<Vec<Step>
         .output()?;
 
     if !output.status.success() {
-        return Err(anyhow::anyhow!("Git push failed: {}", String::from_utf8_lossy(&output.stderr)));
+        return Err(anyhow::anyhow!(
+            "Git push failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
     }
 
     println!("Repository synced to remote: {}", remote_url);
@@ -341,21 +370,19 @@ async fn main() -> anyhow::Result<()> {
     println!("\nCreating remote repository...");
     let token = get_github_token()?;
     let client = Client::new();
-    
+
     let repo = match check_repo_exists(&client, &token, &args.name).await {
         Ok(Some(existing_repo)) => {
-            println!("Remote repository already exists: {}, skipping creation", existing_repo.name);
+            println!(
+                "Remote repository already exists: {}, skipping creation",
+                existing_repo.name
+            );
             existing_repo
         }
         Ok(None) => {
-            match create_github_repo(
-                &client,
-                &token,
-                &args.name,
-                args.private,
-                args.auto_init,
-            )
-            .await {
+            match create_github_repo(&client, &token, &args.name, args.private, args.auto_init)
+                .await
+            {
                 Ok(repo) => {
                     rollback_manager.add_step(Step::RepoCreatedOnGithub(args.name.clone()));
                     repo
@@ -379,7 +406,7 @@ async fn main() -> anyhow::Result<()> {
     } else {
         &repo.ssh_url
     };
-    
+
     match sync_to_remote(&repo_path, remote_url) {
         Ok(steps) => {
             for step in steps {
