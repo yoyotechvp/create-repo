@@ -9,8 +9,11 @@ on:
       - 'v*.*.*'
 
 jobs:
-  release:
-    runs-on: ubuntu-latest
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
       
@@ -32,6 +35,14 @@ jobs:
       
       - name: Test
         run: cargo test --all
+  
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+      - uses: actions/checkout@v4
       
       - name: Extract Version
         id: extract_version
@@ -47,13 +58,31 @@ jobs:
           release_name: Release v${{ env.VERSION }}
           draft: false
           prerelease: false
+  
+  build:
+    needs: release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      
+      - name: Build
+        run: cargo build --release
       
       - name: Upload Artifact
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./target/release/github-init-cli
-          asset_name: github-init-cli
+          upload_url: ${{ needs.release.outputs.upload_url }}
+          asset_path: ${{ matrix.os == 'windows-latest' && './target/release/github-init-cli.exe' || './target/release/github-init-cli' }}
+          asset_name: github-init-cli-${{ matrix.os == 'ubuntu-latest' && 'linux' || matrix.os == 'windows-latest' && 'windows' || 'macos' }}
           asset_content_type: application/octet-stream
